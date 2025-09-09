@@ -228,7 +228,7 @@ async def simulate_sensor_updates():
                     
                     await manager.broadcast({
                         "type": "sensor_update",
-                        "data": drain_obj.dict(default=str)
+                        "data": drain_obj.model_dump(mode='json')
                     })
 
 # Start background task
