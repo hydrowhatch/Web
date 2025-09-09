@@ -192,44 +192,51 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Background task to simulate Raspberry Pi sensor updates
 async def simulate_sensor_updates():
+    await asyncio.sleep(5)  # Wait 5 seconds after startup
     while True:
-        await asyncio.sleep(10)  # Update every 10 seconds
-        
-        # Get all drains
-        drains = await db.drains.find().to_list(1000)
-        if drains:
-            # Randomly select a drain to update
-            random_drain = random.choice(drains)
+        try:
+            await asyncio.sleep(10)  # Update every 10 seconds
             
-            # Randomly change status (simulate sensor reading)
-            statuses = ["livre", "parcialmente_obstruido", "entupido"]
-            current_status = random_drain.get("status", "livre")
-            
-            # 70% chance to stay the same, 30% chance to change
-            if random.random() < 0.3:
-                new_status = random.choice([s for s in statuses if s != current_status])
+            # Get all drains
+            drains = await db.drains.find().to_list(1000)
+            if drains:
+                # Randomly select a drain to update
+                random_drain = random.choice(drains)
                 
-                # Update in database
-                update_dict = {
-                    "status": new_status,
-                    "last_updated": datetime.now(timezone.utc).isoformat()
-                }
+                # Randomly change status (simulate sensor reading)
+                statuses = ["livre", "parcialmente_obstruido", "entupido"]
+                current_status = random_drain.get("status", "livre")
                 
-                await db.drains.update_one(
-                    {"id": random_drain["id"]},
-                    {"$set": update_dict}
-                )
-                
-                # Get updated drain and broadcast
-                updated_drain = await db.drains.find_one({"id": random_drain["id"]})
-                if updated_drain:
-                    parsed_drain = parse_from_mongo(updated_drain)
-                    drain_obj = DrainStatus(**parsed_drain)
+                # 30% chance to change status
+                if random.random() < 0.3:
+                    new_status = random.choice([s for s in statuses if s != current_status])
                     
-                    await manager.broadcast({
-                        "type": "sensor_update",
-                        "data": drain_obj.model_dump(mode='json')
-                    })
+                    # Update in database
+                    update_dict = {
+                        "status": new_status,
+                        "last_updated": datetime.now(timezone.utc).isoformat()
+                    }
+                    
+                    await db.drains.update_one(
+                        {"id": random_drain["id"]},
+                        {"$set": update_dict}
+                    )
+                    
+                    # Get updated drain and broadcast
+                    updated_drain = await db.drains.find_one({"id": random_drain["id"]})
+                    if updated_drain:
+                        parsed_drain = parse_from_mongo(updated_drain)
+                        drain_obj = DrainStatus(**parsed_drain)
+                        
+                        await manager.broadcast({
+                            "type": "sensor_update",
+                            "data": drain_obj.model_dump(mode='json')
+                        })
+                        
+                        logger.info(f"Sensor update: {drain_obj.location_name} changed to {new_status}")
+        except Exception as e:
+            logger.error(f"Error in sensor simulation: {e}")
+            await asyncio.sleep(5)  # Wait before retrying
 
 # Start background task
 @app.on_event("startup")
