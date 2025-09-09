@@ -89,7 +89,7 @@ const DrainMonitoring = () => {
     });
 
     return marker;
-  }, [statusConfig]);
+  }, []);
 
   // Load Google Maps API
   useEffect(() => {
