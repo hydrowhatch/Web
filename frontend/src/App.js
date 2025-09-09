@@ -174,7 +174,7 @@ const DrainMonitoring = () => {
         socket.close();
       }
     };
-  }, []);
+  }, [WS_URL]);
 
   // Fetch drains data
   const fetchDrains = async () => {
