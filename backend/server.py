@@ -98,7 +98,7 @@ async def create_drain(drain_data: DrainStatusCreate):
     # Broadcast the new drain to all connected clients
     await manager.broadcast({
         "type": "drain_created",
-        "data": drain_obj.dict(default=str)
+        "data": drain_obj.model_dump(mode='json')
     })
     
     return drain_obj
