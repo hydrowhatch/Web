@@ -126,7 +126,7 @@ async def update_drain_status(drain_id: str, update_data: DrainStatusUpdate):
     )
     
     if result.modified_count == 0:
-        return {"error": "Drain not found"}
+        raise HTTPException(status_code=404, detail="Drain not found")
     
     # Get updated drain
     updated_drain = await db.drains.find_one({"id": drain_id})
