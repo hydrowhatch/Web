@@ -112,7 +112,7 @@ const DrainMonitoring = () => {
 
   // Update markers on map
   useEffect(() => {
-    if (map && drains.length > 0) {
+    if (map && filteredDrains.length >= 0) {
       // Clear existing markers
       markers.forEach(marker => marker.setMap(null));
       
@@ -120,7 +120,7 @@ const DrainMonitoring = () => {
       const newMarkers = filteredDrains.map(drain => createMarker(drain, map));
       setMarkers(newMarkers.filter(marker => marker !== null));
     }
-  }, [map, filteredDrains, createMarker, markers]);
+  }, [map, filteredDrains]);
 
   // WebSocket connection
   useEffect(() => {
