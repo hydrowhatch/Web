@@ -148,7 +148,7 @@ async def get_drain(drain_id: str):
     if drain:
         parsed_drain = parse_from_mongo(drain)
         return DrainStatus(**parsed_drain)
-    return {"error": "Drain not found"}
+    raise HTTPException(status_code=404, detail="Drain not found")
 
 # Initialize sample data
 @api_router.post("/init-sample-data")
