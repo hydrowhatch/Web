@@ -207,7 +207,7 @@ class SmartSewerAPITester:
             "Get Non-existent Drain",
             "GET",
             "drains/non-existent-id",
-            200  # Based on code, it returns 200 with error message
+            404  # Correct HTTP status for not found
         )
         
         # Test invalid drain update
@@ -215,7 +215,7 @@ class SmartSewerAPITester:
             "Update Non-existent Drain",
             "PUT",
             "drains/non-existent-id",
-            200,  # Based on code, it returns 200 with error message
+            404,  # Correct HTTP status for not found
             data={"status": "livre"}
         )
         
