@@ -137,7 +137,7 @@ async def update_drain_status(drain_id: str, update_data: DrainStatusUpdate):
         # Broadcast the update to all connected clients
         await manager.broadcast({
             "type": "drain_updated",
-            "data": drain_obj.dict(default=str)
+            "data": drain_obj.model_dump(mode='json')
         })
         
         return drain_obj
