@@ -241,6 +241,7 @@ async def simulate_sensor_updates():
 # Start background task
 @app.on_event("startup")
 async def startup_event():
+    logger.info("Starting background sensor simulation task...")
     asyncio.create_task(simulate_sensor_updates())
 
 # Include the router in the main app
