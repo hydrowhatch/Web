@@ -1,0 +1,233 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Monitoramento de Bueiros | Painel em Tempo Real</title>
+    
+    <style>
+        /* Estilos CSS para layout e tabela */
+        body { margin: 0; padding: 0; display: flex; height: 100vh; }
+        #map { flex: 3; height: 100%; }
+        #sidebar { flex: 1; height: 100%; padding: 10px; overflow-y: auto; background-color: #f8f8f8; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #4CAF50; color: white; }
+        .status-red { background-color: #ffcccc; }
+        .status-yellow { background-color: #ffeb99; }
+        .status-green { background-color: #ccffcc; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div id="sidebar">
+        <h2>📊 Status dos Bueiros</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Distância (cm)</th>
+                    <th>Status</th>
+                    <th>Última Medição</th>
+                </tr>
+            </thead>
+            <tbody id="dataTableBody"></tbody>
+        </table>
+        <div style="margin-top: 20px;">
+            <h3>Histórico de Nível</h3>
+            <canvas id="levelChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. VARIÁVEIS GLOBAIS E CONFIGURAÇÃO ---
+        const API_URL = 'http://127.0.0.1:8000/api/v1/data/'; // Mude para http://SEU_IP_AQUI:8000 se rodar na rede local!
+        const GOOGLE_MAPS_API_KEY = 'AIzaSyDDoTKmjnuy_vHTmtkftnG7CrnpaIYcKPg'; 
+        const MANAUS_LOCATION = { lat: -3.1190, lng: -60.0217 }; // Ponto default: Manaus
+        const REFRESH_INTERVAL_MS = 5000; // Atualiza a cada 5 segundos
+        
+        let map; 
+        let allMeasurements = []; 
+        let levelChart; 
+        let markers = []; // Lista para gerenciar marcadores (para limpá-los)
+
+        // --- 2. INICIALIZAÇÃO DO MAPA ---
+        async function initMap() {
+            if (typeof google === 'undefined' || typeof google.maps === 'undefined') {
+                console.error("Google Maps não carregou. Verifique sua chave de API.");
+                return;
+            }
+
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 12, 
+                center: MANAUS_LOCATION,
+            });
+            
+            await fetchAndDisplayData(); // Busca inicial
+            
+            // Agendar a atualização automática (Tempo Real)
+            setInterval(fetchAndDisplayData, REFRESH_INTERVAL_MS);
+        }
+        
+        // --- 3. BUSCA DE DADOS E CENTRALIZAÇÃO ---
+        async function fetchAndDisplayData() {
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) {
+                    throw new Error(`Erro ao buscar dados HTTP: ${response.status}`);
+                }
+                
+                allMeasurements = await response.json(); 
+                
+                // ⚠️ LIMPEZA: Remove marcadores antigos e limpa a tabela antes de redesenhar
+                markers.forEach(marker => marker.setMap(null));
+                markers = []; 
+                document.getElementById('dataTableBody').innerHTML = '';
+
+                if (allMeasurements.length === 0) {
+                    map.setCenter(MANAUS_LOCATION); 
+                    map.setZoom(12);
+                    console.log("Nenhum dado de bueiro encontrado.");
+                    return;
+                }
+
+                // Centraliza no bueiro mais recente
+                const firstBueiro = allMeasurements[0]; 
+                const newCenter = { lat: firstBueiro.latitude, lng: firstBueiro.longitude };
+                
+                map.setCenter(newCenter); 
+                map.setZoom(14); 
+
+                // Itera sobre todos os dados para marcadores e tabela
+                allMeasurements.forEach(data => {
+                    addMarker(data);
+                    updateTable(data);
+                });
+
+                // Inicializa o gráfico com o primeiro bueiro (ou mantém o que estava sendo visualizado)
+                const initialData = allMeasurements.filter(d => d.identificador_bueiro === firstBueiro.identificador_bueiro);
+                renderChart(firstBueiro.identificador_bueiro, initialData);
+
+            } catch (error) {
+                console.error("Erro fatal na busca de dados (API Desligada ou CORS):", error);
+            }
+        }
+
+        // --- 4. CRIAÇÃO DE MARCADOR ---
+        function addMarker(data) {
+            const position = { lat: data.latitude, lng: data.longitude };
+            
+            const status = data.status; 
+            let iconColor = 'green';
+            if (status === 'ALERTA CRÍTICO') { 
+                iconColor = 'red';
+            } else if (status === 'ATENÇÃO') {
+                iconColor = 'yellow';
+            }
+
+            const marker = new google.maps.Marker({ 
+                position: position,
+                map: map,
+                title: data.identificador_bueiro,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 10,
+                    fillColor: iconColor,
+                    fillOpacity: 0.9,
+                    strokeWeight: 0.5,
+                }
+            });
+            
+            markers.push(marker); // Adiciona à lista global
+            
+            const contentString = `
+                <div>
+                    <h4>Bueiro ID: ${data.identificador_bueiro}</h4>
+                    <p>Status: <strong>${status}</strong></p>
+                    <p>Distância da Água: ${data.distancia_cm.toFixed(2)} cm</p>
+                    <p>Medido em: ${new Date(data.timestamp).toLocaleString()}</p>
+                </div>
+            `;
+            const infowindow = new google.maps.InfoWindow({ content: contentString });
+
+            marker.addListener('click', () => {
+                infowindow.open(map, marker);
+                const historicalData = allMeasurements.filter(d => d.identificador_bueiro === data.identificador_bueiro);
+                renderChart(data.identificador_bueiro, historicalData);
+            });
+        }
+        
+        // --- 5. ATUALIZAÇÃO DA TABELA ---
+        function updateTable(data) {
+            const tableBody = document.getElementById('dataTableBody');
+
+            const status = data.status; 
+            let statusClass = 'status-green';
+                
+            if (status === 'ALERTA CRÍTICO') { 
+                statusClass = 'status-red';
+            } else if (status === 'ATENÇÃO') {
+                statusClass = 'status-yellow';
+            }
+
+            const newRow = tableBody.insertRow();
+            newRow.classList.add(statusClass);
+
+            newRow.insertCell(0).innerText = data.identificador_bueiro;
+            newRow.insertCell(1).innerText = data.distancia_cm.toFixed(2);
+            newRow.insertCell(2).innerText = status;
+            
+            const formattedTime = new Date(data.timestamp).toLocaleTimeString('pt-BR');
+            newRow.insertCell(3).innerText = formattedTime;
+        }
+
+        // --- 6. RENDERIZAÇÃO DO GRÁFICO ---
+        function renderChart(bueiroId, historicalData) {
+            const ctx = document.getElementById('levelChart').getContext('2d');
+
+            const labels = historicalData.map(d => new Date(d.timestamp).toLocaleTimeString('pt-BR'));
+            const distances = historicalData.map(d => d.distancia_cm);
+
+            if (levelChart) {
+                levelChart.destroy();
+            }
+
+            levelChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `Distância da Água (cm) - ${bueiroId}`,
+                        data: distances,
+                        borderColor: '#4CAF50',
+                        backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Distância (cm) - Mais baixo é Pior'
+                            },
+                            reverse: true,
+                            beginAtZero: false 
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDDoTKmjnuy_vHTmtkftnG7CrnpaIYcKPg&callback=initMap">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</body>
+</html>
